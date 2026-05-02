@@ -116,14 +116,14 @@ client.on('interactionCreate', async interaction => {
     if (!guildId) return;
     const config = getGuildConfig(guildId);
 
-    // TRAVA DE SEGURANÇA: APENAS O DONO (OWNER_ID) PODE USAR COMANDOS E CONFIGURAR
-    const ownerId = process.env.OWNER_ID;
+    // TRAVA DE SEGURANÇA: APENAS OS DONOS (OWNER_ID) PODEM USAR COMANDOS E CONFIGURAR
+    const ownerIds = process.env.OWNER_ID ? process.env.OWNER_ID.split(',').map(id => id.trim()) : [];
 
     try {
         if (interaction.isChatInputCommand()) {
             // Verifica se quem está usando é o dono autorizado
-            if (interaction.user.id !== ownerId) {
-                return interaction.reply({ content: `❌ Você não tem permissão para usar este bot. Apenas o dono autorizado pode realizar configurações.`, ephemeral: true });
+            if (!ownerIds.includes(interaction.user.id)) {
+                return interaction.reply({ content: `❌ Você não tem permissão para usar este bot. Apenas os donos autorizados podem realizar configurações.`, ephemeral: true });
             }
 
             if (interaction.commandName === 'config') return interaction.reply({ embeds: [createConfigEmbed(guildId)], components: createConfigButtons(), ephemeral: true });
@@ -143,7 +143,7 @@ client.on('interactionCreate', async interaction => {
 
             // Bloqueia interações do /config para quem não for o dono
             const configButtons = ['set_desc', 'set_welcome', 'set_role', 'set_logs', 'set_cat', 'add_opt', 'rem_opt'];
-            if (configButtons.includes(customId) && interaction.user.id !== ownerId) {
+            if (configButtons.includes(customId) && !ownerIds.includes(interaction.user.id)) {
                 return interaction.reply({ content: '❌ Apenas o dono autorizado pode mexer nas configurações.', ephemeral: true });
             }
 
@@ -205,7 +205,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.isRoleSelectMenu()) {
-            if (interaction.user.id !== ownerId) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
+            if (!ownerIds.includes(interaction.user.id)) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
             if (interaction.customId === 'select_role') {
                 config.admin_role_id = interaction.values[0];
                 saveDB();
@@ -213,7 +213,7 @@ client.on('interactionCreate', async interaction => {
             }
         }
         if (interaction.isChannelSelectMenu()) {
-            if (interaction.user.id !== ownerId) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
+            if (!ownerIds.includes(interaction.user.id)) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
             if (interaction.customId === 'select_logs') {
                 config.log_channel_id = interaction.values[0];
                 saveDB();
@@ -228,7 +228,7 @@ client.on('interactionCreate', async interaction => {
 
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId === 'select_rem') {
-                if (interaction.user.id !== ownerId) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
+                if (!ownerIds.includes(interaction.user.id)) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
                 config.categories = config.categories.filter(c => c.name !== interaction.values[0]);
                 saveDB();
                 return interaction.update({ content: '✅ Opção excluída!', components: [] });
@@ -269,7 +269,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.isModalSubmit()) {
-            if (interaction.user.id !== ownerId) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
+            if (!ownerIds.includes(interaction.user.id)) return interaction.reply({ content: '❌ Acesso negado.', ephemeral: true });
             if (interaction.customId === 'modal_desc') config.description = interaction.fields.getTextInputValue('in_desc');
             if (interaction.customId === 'modal_welcome') config.welcome_text = interaction.fields.getTextInputValue('in_welcome');
             if (interaction.customId === 'modal_add') config.categories.push({ name: interaction.fields.getTextInputValue('in_name'), emoji: interaction.fields.getTextInputValue('in_emoji') || emojis.ticket });
