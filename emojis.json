@@ -1,0 +1,17 @@
+{
+    "config_panel": "⚙️",
+    "description": "📝",
+    "roles": "👮",
+    "logs": "📜",
+    "category": "📁",
+    "add_option": "<:mais:1465112750958051438>",
+    "remove_option": "<:menos:1465112813444927560>",
+    "ticket": "🎫",
+    "success": "✅",
+    "error": "❌",
+    "loading": "⏳",
+    "notify": "<:sino:1391889845038878851>",
+    "claim": "<:suport:1478106999517347911>",
+    "close": "<:lixeira:1453320418076266567>",
+    "ticket_welcome": "👋"
+}
