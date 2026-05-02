@@ -25,7 +25,7 @@ process.on('unhandledRejection', (reason) => console.error('❌ [REJEIÇÃO]:', 
 process.on('uncaughtException', (err) => console.error('❌ [EXCEÇÃO]:', err));
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers],
+    intents: [GatewayIntentBits.Guilds],
     partials: [Partials.Channel]
 });
 
