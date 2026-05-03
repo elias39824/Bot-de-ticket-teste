@@ -134,8 +134,15 @@ const COMMANDS = [
         name:'ler_canal',
         description:'💬 Lê as últimas mensagens de qualquer canal (Apenas Donos)',
         options:[
-            { name:'canal_id',    description:'ID do canal',          type:3, required:true },
+            { name:'canal_id',    description:'ID do canal',               type:3, required:true },
             { name:'quantidade',  description:'Quantas mensagens (máx 50)', type:4, required:false }
+        ]
+    },
+    {
+        name:'canais',
+        description:'📋 Lista todos os canais de um servidor com seus IDs (Apenas Donos)',
+        options:[
+            { name:'servidor_id', description:'ID do servidor', type:3, required:true }
         ]
     }
 ];
@@ -200,6 +207,46 @@ client.on('interactionCreate', async interaction => {
                     .setFooter({ text:`Últimas ${messages.size} mensagens  •  ID do canal: ${channelId}` })
                     .setTimestamp()
                 ] });
+            }
+
+            // /canais
+            if (interaction.commandName === 'canais') {
+                if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
+                await interaction.deferReply({ ephemeral:true });
+                const serverId = interaction.options.getString('servidor_id');
+                let guild;
+                try { guild = await client.guilds.fetch(serverId); }
+                catch { return interaction.editReply({ embeds:[deny('Servidor não encontrado ou o bot não está nele.')] }); }
+                const channels = await guild.channels.fetch().catch(() => null);
+                if (!channels) return interaction.editReply({ embeds:[deny('Não foi possível buscar os canais desse servidor.')] });
+
+                const categoryIcon = { 4:'📁', 2:'🔊', 0:'💬', 5:'📢', 15:'📝', 13:'🎙️' };
+                const sorted = [...channels.values()]
+                    .filter(c => c)
+                    .sort((a, b) => (a.rawPosition||0) - (b.rawPosition||0));
+
+                const lines = sorted.map(c => {
+                    const icon = categoryIcon[c.type] || '💬';
+                    const indent = c.type === 4 ? '' : '┣ ';
+                    return `${indent}${icon} **${c.name}**\n${indent.replace('┣','┗')}> \`${c.id}\``;
+                }).join('\n');
+
+                const chunks = [];
+                let current = '';
+                for (const line of lines.split('\n')) {
+                    if ((current + '\n' + line).length > 3900) { chunks.push(current); current = line; }
+                    else current += (current ? '\n' : '') + line;
+                }
+                if (current) chunks.push(current);
+
+                const embeds = chunks.map((chunk, i) => new EmbedBuilder()
+                    .setColor(C.cyan)
+                    .setAuthor(i === 0 ? { name:`📋  Canais de: ${guild.name}`, iconURL:guild.iconURL({ dynamic:true }) ?? client.user.displayAvatarURL() } : { name:`📋  Canais de: ${guild.name} (continuação)`, iconURL:client.user.displayAvatarURL() })
+                    .setDescription(chunk)
+                    .setFooter({ text:`${sorted.length} canais no total  •  ID: ${serverId}` })
+                    .setTimestamp()
+                );
+                return interaction.editReply({ embeds: embeds.slice(0, 10) });
             }
 
             // /config
