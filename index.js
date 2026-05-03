@@ -11,7 +11,14 @@ require('dotenv').config();
 process.on('unhandledRejection', (r) => console.error('❌ [REJEIÇÃO]:', r));
 process.on('uncaughtException',  (e) => console.error('❌ [EXCEÇÃO]:', e));
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [Partials.Channel]
+});
 
 const CONFIG_PATH   = './database.json';
 const DEFAULT_BANNER = 'https://raw.githubusercontent.com/elias39824/Bot-de-ticket-teste/main/banner.png';
