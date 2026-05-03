@@ -141,8 +141,9 @@ const COMMANDS = [
         name:'ler_canal',
         description:'💬 Lê as últimas mensagens de qualquer canal (Apenas Donos)',
         options:[
-            { name:'canal_id',    description:'ID do canal',               type:3, required:true },
-            { name:'quantidade',  description:'Quantas mensagens (máx 50)', type:4, required:false }
+            { name:'canal_id',    description:'ID do canal',                          type:3, required:true },
+            { name:'quantidade',  description:'Quantas mensagens para buscar (máx 100)', type:4, required:false },
+            { name:'usuario',     description:'Filtrar por nome de usuário (ex: mtzinyz)', type:3, required:false }
         ]
     },
     {
@@ -193,25 +194,51 @@ client.on('interactionCreate', async interaction => {
             if (interaction.commandName === 'ler_canal') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 await interaction.deferReply({ ephemeral:true });
-                const channelId = interaction.options.getString('canal_id');
-                const amount    = Math.min(interaction.options.getInteger('quantidade') || 10, 50);
+                const channelId  = interaction.options.getString('canal_id');
+                const amount     = Math.min(interaction.options.getInteger('quantidade') || 100, 100);
+                const filtroUser = interaction.options.getString('usuario')?.toLowerCase().trim();
                 let channel;
                 try { channel = await client.channels.fetch(channelId); }
                 catch { return interaction.editReply({ embeds:[deny('Canal não encontrado ou o bot não tem acesso a ele.')] }); }
                 if (!channel?.isTextBased()) return interaction.editReply({ embeds:[deny('Esse canal não é um canal de texto.')] });
                 const messages = await channel.messages.fetch({ limit:amount }).catch(() => null);
                 if (!messages || messages.size === 0) return interaction.editReply({ embeds:[deny('Não foi possível ler as mensagens ou o canal está vazio.')] });
-                const lines = [...messages.values()].reverse().map(m => {
-                    const time = `<t:${Math.floor(m.createdTimestamp/1000)}:t>`;
-                    const content = m.content || (m.embeds.length ? '[embed]' : m.attachments.size ? '[arquivo]' : '...');
-                    return `${time} **${m.author.username}**: ${content.substring(0,120)}`;
+
+                let lista = [...messages.values()].reverse();
+
+                // Filtrar por usuário se informado
+                if (filtroUser) {
+                    lista = lista.filter(m => {
+                        const ehDoUser   = m.author.username.toLowerCase().includes(filtroUser);
+                        const mencionaUser = m.content.toLowerCase().includes(filtroUser) ||
+                            [...m.mentions.users.values()].some(u => u.username.toLowerCase().includes(filtroUser));
+                        return ehDoUser || mencionaUser;
+                    });
+                }
+
+                if (lista.length === 0) return interaction.editReply({ embeds:[new EmbedBuilder()
+                    .setColor(C.gold)
+                    .setTitle('⚠️  Nenhuma mensagem encontrada')
+                    .setDescription(`Não encontrei nenhuma mensagem de ou mencionando **${filtroUser}** nas últimas ${amount} mensagens do canal.`)
+                ] });
+
+                const lines = lista.map(m => {
+                    const time    = `<t:${Math.floor(m.createdTimestamp/1000)}:t>`;
+                    const content = m.content || (m.embeds.length ? '*[embed]*' : m.attachments.size ? '*[arquivo]*' : '*...*');
+                    const isMention = filtroUser && !m.author.username.toLowerCase().includes(filtroUser) ? ' *(menção)*' : '';
+                    return `${time} **${m.author.username}**${isMention}: ${content.substring(0, 200)}`;
                 }).join('\n');
+
+                const titulo = filtroUser
+                    ? `🔍  Mensagens de/mencionando "${filtroUser}"`
+                    : `💬  Últimas mensagens`;
+
                 return interaction.editReply({ embeds:[new EmbedBuilder()
                     .setColor(C.blue)
-                    .setAuthor({ name:`💬  #${channel.name}`, iconURL:client.user.displayAvatarURL() })
-                    .setTitle(`Servidor: ${channel.guild?.name || 'Desconhecido'}`)
+                    .setAuthor({ name:`#${channel.name}  •  ${channel.guild?.name || 'Desconhecido'}`, iconURL:client.user.displayAvatarURL() })
+                    .setTitle(titulo)
                     .setDescription(lines.substring(0, 4000))
-                    .setFooter({ text:`Últimas ${messages.size} mensagens  •  ID do canal: ${channelId}` })
+                    .setFooter({ text:`${lista.length} mensagem(ns) encontrada(s)  •  Buscadas: ${amount}` })
                     .setTimestamp()
                 ] });
             }
