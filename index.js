@@ -128,6 +128,69 @@ function createLogEmbed(type, user, category, channel, claimedBy) {
         .setTimestamp();
 }
 
+// ─── LEITOR DE MENSAGENS ──────────────────────────────────────────────────────
+async function buildMsgViewer(channel, opts = {}) {
+    const { before, after, filtro } = opts;
+    const fetchOpts = { limit: 50 };
+    if (before) fetchOpts.before = before;
+    if (after)  fetchOpts.after  = after;
+
+    const messages = await channel.messages.fetch(fetchOpts).catch(() => null);
+    if (!messages || messages.size === 0) return null;
+
+    let lista = [...messages.values()];
+    // Se buscamos "after" (mais recentes), a ordem é invertida
+    if (after) lista = lista.reverse();
+    else lista = lista.reverse(); // mais antigas no topo
+
+    if (filtro) {
+        lista = lista.filter(m => {
+            const ehDoUser     = m.author.username.toLowerCase().includes(filtro);
+            const mencionaUser = m.content.toLowerCase().includes(filtro) ||
+                [...m.mentions.users.values()].some(u => u.username.toLowerCase().includes(filtro));
+            return ehDoUser || mencionaUser;
+        });
+    }
+
+    if (lista.length === 0) return null;
+
+    const oldestId = lista[0].id;
+    const newestId = lista[lista.length - 1].id;
+    const f = filtro || '';
+
+    const lines = lista.map(m => {
+        const time    = `<t:${Math.floor(m.createdTimestamp/1000)}:t>`;
+        const content = m.content || (m.embeds.length ? '*[embed]*' : m.attachments.size ? '*[arquivo]*' : '*...*');
+        const tag     = filtro && !m.author.username.toLowerCase().includes(filtro) ? ' *(menção)*' : '';
+        return `${time} **${m.author.username}**${tag}: ${content.substring(0, 180)}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+        .setColor(C.blue)
+        .setAuthor({ name: `#${channel.name}  •  ${channel.guild?.name || '?'}`, iconURL: client.user.displayAvatarURL() })
+        .setTitle(filtro ? `🔍  Filtro: "${filtro}"` : `💬  Mensagens do Canal`)
+        .setDescription(lines.substring(0, 4000))
+        .setFooter({ text: `${lista.length} mensagem(ns) exibida(s)  •  Use os botões para navegar` })
+        .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`msg_older:${channel.id}:${oldestId}:${f}`)
+            .setLabel('⬆️  Mais Antigas')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId(`msg_refresh:${channel.id}::${f}`)
+            .setLabel('🔄  Atualizar')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(`msg_newer:${channel.id}:${newestId}:${f}`)
+            .setLabel('⬇️  Mais Recentes')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embed, row, lista };
+}
+
 // ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
 const COMMANDS = [
     { name:'config',      description:'⚙️ Abre o painel de configuração (Apenas Donos)' },
@@ -195,52 +258,14 @@ client.on('interactionCreate', async interaction => {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 await interaction.deferReply({ ephemeral:true });
                 const channelId  = interaction.options.getString('canal_id');
-                const amount     = Math.min(interaction.options.getInteger('quantidade') || 100, 100);
-                const filtroUser = interaction.options.getString('usuario')?.toLowerCase().trim();
+                const filtroUser = interaction.options.getString('usuario')?.toLowerCase().trim() || '';
                 let channel;
                 try { channel = await client.channels.fetch(channelId); }
                 catch { return interaction.editReply({ embeds:[deny('Canal não encontrado ou o bot não tem acesso a ele.')] }); }
                 if (!channel?.isTextBased()) return interaction.editReply({ embeds:[deny('Esse canal não é um canal de texto.')] });
-                const messages = await channel.messages.fetch({ limit:amount }).catch(() => null);
-                if (!messages || messages.size === 0) return interaction.editReply({ embeds:[deny('Não foi possível ler as mensagens ou o canal está vazio.')] });
-
-                let lista = [...messages.values()].reverse();
-
-                // Filtrar por usuário se informado
-                if (filtroUser) {
-                    lista = lista.filter(m => {
-                        const ehDoUser   = m.author.username.toLowerCase().includes(filtroUser);
-                        const mencionaUser = m.content.toLowerCase().includes(filtroUser) ||
-                            [...m.mentions.users.values()].some(u => u.username.toLowerCase().includes(filtroUser));
-                        return ehDoUser || mencionaUser;
-                    });
-                }
-
-                if (lista.length === 0) return interaction.editReply({ embeds:[new EmbedBuilder()
-                    .setColor(C.gold)
-                    .setTitle('⚠️  Nenhuma mensagem encontrada')
-                    .setDescription(`Não encontrei nenhuma mensagem de ou mencionando **${filtroUser}** nas últimas ${amount} mensagens do canal.`)
-                ] });
-
-                const lines = lista.map(m => {
-                    const time    = `<t:${Math.floor(m.createdTimestamp/1000)}:t>`;
-                    const content = m.content || (m.embeds.length ? '*[embed]*' : m.attachments.size ? '*[arquivo]*' : '*...*');
-                    const isMention = filtroUser && !m.author.username.toLowerCase().includes(filtroUser) ? ' *(menção)*' : '';
-                    return `${time} **${m.author.username}**${isMention}: ${content.substring(0, 200)}`;
-                }).join('\n');
-
-                const titulo = filtroUser
-                    ? `🔍  Mensagens de/mencionando "${filtroUser}"`
-                    : `💬  Últimas mensagens`;
-
-                return interaction.editReply({ embeds:[new EmbedBuilder()
-                    .setColor(C.blue)
-                    .setAuthor({ name:`#${channel.name}  •  ${channel.guild?.name || 'Desconhecido'}`, iconURL:client.user.displayAvatarURL() })
-                    .setTitle(titulo)
-                    .setDescription(lines.substring(0, 4000))
-                    .setFooter({ text:`${lista.length} mensagem(ns) encontrada(s)  •  Buscadas: ${amount}` })
-                    .setTimestamp()
-                ] });
+                const result = await buildMsgViewer(channel, { filtro: filtroUser });
+                if (!result) return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.gold).setTitle('⚠️  Nenhuma mensagem encontrada').setDescription('O canal está vazio ou não há mensagens com esse filtro.')] });
+                return interaction.editReply({ embeds:[result.embed], components:[result.row] });
             }
 
             // /canais
@@ -350,6 +375,29 @@ client.on('interactionCreate', async interaction => {
                 const sel = new StringSelectMenuBuilder().setCustomId('select_rem').setPlaceholder('Escolha a categoria para excluir...').addOptions(cfg.categories.map(c => ({ label:c.name, value:c.name, emoji:c.emoji||'🎫' })));
                 return interaction.reply({ components:[new ActionRowBuilder().addComponents(sel)], ephemeral:true });
             }
+            // ── Navegação de mensagens ──
+            if (customId.startsWith('msg_refresh:') || customId.startsWith('msg_older:') || customId.startsWith('msg_newer:')) {
+                if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
+                await interaction.deferUpdate();
+                const parts     = customId.split(':');
+                const tipo      = parts[0];
+                const channelId = parts[1];
+                const pivotId   = parts[2] || '';
+                const filtro    = parts[3] || '';
+                let channel;
+                try { channel = await client.channels.fetch(channelId); }
+                catch { return interaction.editReply({ embeds:[deny('Não foi possível acessar o canal.')], components:[] }); }
+                let opts = { filtro };
+                if (tipo === 'msg_older' && pivotId) opts.before = pivotId;
+                if (tipo === 'msg_newer' && pivotId) opts.after  = pivotId;
+                const result = await buildMsgViewer(channel, opts);
+                if (!result) {
+                    const msg = tipo === 'msg_older' ? 'Não há mensagens mais antigas.' : 'Não há mensagens mais recentes.';
+                    return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.gold).setDescription(`⚠️  ${msg}`)], components:interaction.message.components });
+                }
+                return interaction.editReply({ embeds:[result.embed], components:[result.row] });
+            }
+
             if (customId==='close_ticket') {
                 await interaction.reply({ embeds:[new EmbedBuilder().setColor(C.red).setTitle('🔒  Ticket Encerrado')
                     .setDescription(`Este ticket foi fechado por **${interaction.user}**.\n\n> O canal será **deletado em 3 segundos**...`)
