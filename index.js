@@ -41,16 +41,19 @@ function getGuildConfig(guildId) {
         welcome_text:'Olá {user}! 👋\n\nSeu ticket foi aberto com sucesso.\nDescreva sua solicitação com detalhes e aguarde um membro da equipe.',
         log_channel_id:null, admin_role_id:null, category_id:null,
         banner_url:DEFAULT_BANNER, categories:[],
-        staff_review_role_id:null, staff_category_id:null
+        staff_review_role_id:null, staff_category_id:null,
+        verify_url:null, verify_role_id:null
     };
-    if (!db[guildId].banner_url)           db[guildId].banner_url           = DEFAULT_BANNER;
-    if (!db[guildId].staff_review_role_id) db[guildId].staff_review_role_id = null;
-    if (!db[guildId].staff_category_id)    db[guildId].staff_category_id    = null;
+    const g = db[guildId];
+    if (!g.banner_url)           g.banner_url           = DEFAULT_BANNER;
+    if (!g.staff_review_role_id) g.staff_review_role_id = null;
+    if (!g.staff_category_id)    g.staff_category_id    = null;
+    if (g.verify_url  === undefined) g.verify_url  = null;
+    if (g.verify_role_id === undefined) g.verify_role_id = null;
     saveDB();
-    return db[guildId];
+    return g;
 }
 
-// Formulários em progresso — salvo no DB para sobreviver a reinícios
 function getStaffApp(userId) {
     if (!db._staffApps) db._staffApps = {};
     return db._staffApps[userId] || null;
@@ -79,13 +82,15 @@ function createConfigEmbed(guildId) {
         .setDescription(`${DIV}\n**Gerencie todas as configurações do sistema abaixo.**\n${DIV}`)
         .addFields(
             { name:'📝 Descrição do Painel',    value:`> ${cfg.description}`,  inline:false },
-            { name:'👋 Mensagem de Boas-vindas', value:`> ${cfg.welcome_text}`, inline:false },
-            { name:'👮 Cargo Equipe',         value:cfg.admin_role_id           ? `<@&${cfg.admin_role_id}>`           : '`Não definido`', inline:true },
-            { name:'📜 Canal de Logs',         value:cfg.log_channel_id          ? `<#${cfg.log_channel_id}>`           : '`Não definido`', inline:true },
-            { name:'📁 Categoria Tickets',     value:cfg.category_id             ? `<#${cfg.category_id}>`              : '`Não definida`', inline:true },
-            { name:'🖼️ Banner',                value:cfg.banner_url ? `[🔗 Ver](${cfg.banner_url})` : '`Não definido`', inline:true },
-            { name:'👑 Cargo Revisão Staff',   value:cfg.staff_review_role_id    ? `<@&${cfg.staff_review_role_id}>`    : '`Não definido`', inline:true },
-            { name:'📂 Categoria Formulários', value:cfg.staff_category_id       ? `<#${cfg.staff_category_id}>`        : '`Não definida`', inline:true },
+            { name:'👋 Boas-vindas no Ticket',  value:`> ${cfg.welcome_text}`, inline:false },
+            { name:'👮 Cargo Equipe',           value:cfg.admin_role_id           ? `<@&${cfg.admin_role_id}>`           : '`Não definido`', inline:true },
+            { name:'📜 Canal de Logs',           value:cfg.log_channel_id          ? `<#${cfg.log_channel_id}>`           : '`Não definido`', inline:true },
+            { name:'📁 Categoria Tickets',       value:cfg.category_id             ? `<#${cfg.category_id}>`              : '`Não definida`', inline:true },
+            { name:'🖼️ Banner',                  value:cfg.banner_url ? `[🔗 Ver](${cfg.banner_url})` : '`Não definido`', inline:true },
+            { name:'👑 Cargo Revisão Staff',     value:cfg.staff_review_role_id    ? `<@&${cfg.staff_review_role_id}>`    : '`Não definido`', inline:true },
+            { name:'📂 Categoria Formulários',   value:cfg.staff_category_id       ? `<#${cfg.staff_category_id}>`        : '`Não definida`', inline:true },
+            { name:'🔗 URL de Verificação',      value:cfg.verify_url              ? `\`${cfg.verify_url}\``              : '`Não definida`', inline:true },
+            { name:'🏷️ Cargo Verificado',        value:cfg.verify_role_id          ? `<@&${cfg.verify_role_id}>`          : '`Não definido`', inline:true },
             { name:`🎫 Categorias (${cfg.categories?.length||0})`, value:cats, inline:false }
         )
         .setThumbnail(client.user.displayAvatarURL({ size:256 }))
@@ -93,26 +98,30 @@ function createConfigEmbed(guildId) {
         .setFooter({ text:'🔒 Apenas donos autorizados', iconURL:client.user.displayAvatarURL() })
         .setTimestamp();
 }
+
 function createConfigButtons() {
     return [
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('set_desc')      .setLabel('Descrição')          .setEmoji('📝').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('set_welcome')   .setLabel('Boas-vindas')        .setEmoji('👋').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('set_role')      .setLabel('Cargo Equipe')       .setEmoji('👮').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('set_banner')    .setLabel('Banner/GIF')         .setEmoji('🖼️').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('set_desc')       .setLabel('Descrição')           .setEmoji('📝').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_welcome')    .setLabel('Boas-vindas')         .setEmoji('👋').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_role')       .setLabel('Cargo Equipe')        .setEmoji('👮').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_banner')     .setLabel('Banner/GIF')          .setEmoji('🖼️').setStyle(ButtonStyle.Primary)
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('set_logs')      .setLabel('Canal Logs')         .setEmoji('📜').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('set_cat')       .setLabel('Categ. Tickets')     .setEmoji('📁').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('add_opt')       .setLabel('Add Categoria')      .setEmoji('➕').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('rem_opt')       .setLabel('Rem Categoria')      .setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId('set_logs')       .setLabel('Canal Logs')          .setEmoji('📜').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_cat')        .setLabel('Categ. Tickets')      .setEmoji('📁').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('add_opt')        .setLabel('Add Categoria')       .setEmoji('➕').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('rem_opt')        .setLabel('Rem Categoria')       .setEmoji('🗑️').setStyle(ButtonStyle.Danger)
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('set_staff_role').setLabel('Cargo Revisão Staff').setEmoji('👑').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('set_staff_cat') .setLabel('Categ. Formulários') .setEmoji('📂').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('set_staff_role') .setLabel('Cargo Revisão Staff') .setEmoji('👑').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_staff_cat')  .setLabel('Categ. Formulários')  .setEmoji('📂').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_verify_url') .setLabel('URL Verificação')     .setEmoji('🔗').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('set_verify_role').setLabel('Cargo Verificado')    .setEmoji('🏷️').setStyle(ButtonStyle.Secondary)
         )
     ];
 }
+
 function createTicketPanelEmbed(cfg, guild) {
     const cats = cfg.categories?.length
         ? cfg.categories.map(c => `> ${c.emoji||'🎫'}  **${c.name}**`).join('\n')
@@ -126,6 +135,7 @@ function createTicketPanelEmbed(cfg, guild) {
         .setFooter({ text:`${guild.name}  •  Sistema de Tickets`, iconURL:guild.iconURL({ dynamic:true })??client.user.displayAvatarURL() })
         .setTimestamp();
 }
+
 function createTicketEmbed(cfg, category, user, guild) {
     return new EmbedBuilder()
         .setColor(C.gold)
@@ -133,8 +143,8 @@ function createTicketEmbed(cfg, category, user, guild) {
         .setTitle('✨  Bem-vindo ao seu atendimento!')
         .setDescription(`${STAR} ${DIV} ${STAR}\n\n${cfg.welcome_text.replace('{user}',user.toString())}\n\n${STAR} ${DIV} ${STAR}\n\u200B`)
         .addFields(
-            { name:'👤  Solicitante', value:`${user}`,    inline:true },
-            { name:'📂  Categoria',   value:`\`${category}\``, inline:true },
+            { name:'👤  Solicitante', value:`${user}`,           inline:true },
+            { name:'📂  Categoria',   value:`\`${category}\``,   inline:true },
             { name:'🕐  Aberto em',   value:`<t:${Math.floor(Date.now()/1000)}:F>`, inline:true }
         )
         .setThumbnail(user.displayAvatarURL({ dynamic:true, size:256 }))
@@ -142,6 +152,7 @@ function createTicketEmbed(cfg, category, user, guild) {
         .setFooter({ text:`ID do usuário: ${user.id}`, iconURL:user.displayAvatarURL({ dynamic:true }) })
         .setTimestamp();
 }
+
 function createLogEmbed(type, user, category, channel, claimedBy) {
     const open = type === 'open';
     return new EmbedBuilder()
@@ -149,8 +160,8 @@ function createLogEmbed(type, user, category, channel, claimedBy) {
         .setAuthor({ name:user.tag, iconURL:user.displayAvatarURL({ dynamic:true }) })
         .setTitle(open ? '📂  Ticket Aberto' : '🔒  Ticket Fechado')
         .addFields(
-            { name:'👤  Usuário',   value:`${user}`, inline:true },
-            { name:'📂  Categoria', value:`\`${category||'N/A'}\``, inline:true },
+            { name:'👤  Usuário',   value:`${user}`,                     inline:true },
+            { name:'📂  Categoria', value:`\`${category||'N/A'}\``,      inline:true },
             { name:'📌  Canal',     value:channel ? `${channel}` : '`deletado`', inline:true },
             ...(claimedBy ? [{ name:'🙋  Atendido por', value:claimedBy, inline:true }] : [])
         )
@@ -158,6 +169,7 @@ function createLogEmbed(type, user, category, channel, claimedBy) {
         .setFooter({ text:`ID: ${user.id}` })
         .setTimestamp();
 }
+
 function buildStaffResultEmbed(user, answers) {
     const [q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,q12,q13,q14] = answers;
     return new EmbedBuilder()
@@ -216,7 +228,7 @@ async function buildMsgViewer(channel, opts = {}) {
     const embed = new EmbedBuilder()
         .setColor(C.blue)
         .setAuthor({ name:`#${channel.name}  •  ${channel.guild?.name||'?'}`, iconURL:client.user.displayAvatarURL() })
-        .setTitle(filtro ? `🔍  Filtro: "${filtro}"` : `💬  Mensagens do Canal`)
+        .setTitle(filtro ? `🔍  Filtro: "${filtro}"` : '💬  Mensagens do Canal')
         .setDescription(lines.substring(0,4000))
         .setFooter({ text:`${lista.length} mensagem(ns)  •  Use os botões para navegar` })
         .setTimestamp();
@@ -230,9 +242,10 @@ async function buildMsgViewer(channel, opts = {}) {
 
 // ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
 const COMMANDS = [
-    { name:'config',      description:'⚙️ Abre o painel de configuração (Apenas Donos)' },
-    { name:'cria_ticket', description:'🎫 Envia o painel de tickets no canal (Apenas Donos)' },
-    { name:'formulario',  description:'📋 Abrir formulário para se candidatar a Staff do EH NIGHT WORLD' },
+    { name:'config',          description:'⚙️ Abre o painel de configuração (Apenas Donos)' },
+    { name:'cria_ticket',     description:'🎫 Envia o painel de tickets no canal (Apenas Donos)' },
+    { name:'formulario',      description:'📋 Abrir formulário para se candidatar a Staff do EH NIGHT WORLD' },
+    { name:'painel_verificar',description:'✅ Envia o painel de verificação por bio no canal (Apenas Donos)' },
     {
         name:'servidores',
         description:'🌐 Lista todos os servidores onde o bot está (Apenas Donos)',
@@ -267,23 +280,21 @@ client.on('interactionCreate', async interaction => {
         // ══════ SLASH COMMANDS ══════════════════════════════════════════════
         if (interaction.isChatInputCommand()) {
 
-            // /formulario — abre a parte 1 direto como modal
+            // /formulario
             if (interaction.commandName === 'formulario') {
                 const existing = getStaffApp(interaction.user.id);
                 if (existing) {
-                    // Já tem formulário salvo — oferece continuar
                     const step = existing.step || 1;
-                    const nextLabel = step === 1 ? 'Continuar para Parte 2' : 'Continuar para Parte 3';
-                    const nextId    = step === 1 ? `staff_cont_2:${interaction.user.id}` : `staff_cont_3:${interaction.user.id}`;
+                    const nextId = step === 1 ? `staff_cont_2:${interaction.user.id}` : `staff_cont_3:${interaction.user.id}`;
+                    const nextLabel = step === 1 ? 'Continuar — Parte 2' : 'Continuar — Parte 3';
                     return interaction.reply({ ephemeral:true, embeds:[new EmbedBuilder()
                         .setColor(C.gold).setTitle('⚠️  Formulário em Andamento')
-                        .setDescription(`Você tem um formulário na **Parte ${step+1}** em andamento.\nClique no botão para continuar ou ignore para começar do zero.`)
+                        .setDescription(`Você tem um formulário na **Parte ${step+1}** em andamento.\nClique para continuar ou reinicie do zero.`)
                     ], components:[new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId(nextId).setLabel(nextLabel).setEmoji('▶️').setStyle(ButtonStyle.Primary),
                         new ButtonBuilder().setCustomId(`staff_restart:${interaction.user.id}`).setLabel('Começar do Zero').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
                     )]});
                 }
-                // Inicia novo formulário — mostra modal 1 diretamente
                 setStaffApp(interaction.user.id, { step:0, answers:[], guildId });
                 const modal = new ModalBuilder().setCustomId('staff_form_1').setTitle('📋 Formulário Staff — Parte 1 de 3');
                 modal.addComponents(
@@ -296,6 +307,33 @@ client.on('interactionCreate', async interaction => {
                 return interaction.showModal(modal);
             }
 
+            // /painel_verificar
+            if (interaction.commandName === 'painel_verificar') {
+                if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
+                await interaction.deferReply({ ephemeral:true });
+                if (!cfg.verify_url)     return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.gold).setTitle('⚠️  URL não configurada').setDescription('Configure a URL de verificação no `/config` primeiro!')] });
+                if (!cfg.verify_role_id) return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.gold).setTitle('⚠️  Cargo não configurado').setDescription('Configure o cargo de verificado no `/config` primeiro!')] });
+
+                const verifyEmbed = new EmbedBuilder()
+                    .setColor(C.purple)
+                    .setAuthor({ name:interaction.guild.name, iconURL:interaction.guild.iconURL({ dynamic:true })??client.user.displayAvatarURL() })
+                    .setTitle('✅  Verificação de Membro')
+                    .setDescription(`${STAR} ${DIV} ${STAR}\n\n**Para se verificar e ter acesso ao servidor, siga os passos:**\n\n> **1️⃣** Adicione o link do servidor na sua bio do Discord\n> \`\`\`${cfg.verify_url}\`\`\`\n> **2️⃣** Clique no botão **Verificar** abaixo\n> **3️⃣** O bot irá verificar sua bio e te dar o cargo automaticamente!\n\n${STAR} ${DIV} ${STAR}\n\n> ⚠️ Certifique-se que a URL está **exatamente** como mostrado acima na sua bio.`)
+                    .setImage(cfg.banner_url||DEFAULT_BANNER)
+                    .setFooter({ text:`${interaction.guild.name}  •  Sistema de Verificação`, iconURL:interaction.guild.iconURL({ dynamic:true })??client.user.displayAvatarURL() })
+                    .setTimestamp();
+
+                const verifyBtn = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`verify_bio:${guildId}`)
+                        .setLabel('✅  Verificar Minha Bio')
+                        .setStyle(ButtonStyle.Success)
+                );
+                await interaction.channel.send({ embeds:[verifyEmbed], components:[verifyBtn] });
+                return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.green).setTitle('✅  Painel de Verificação Enviado!')] });
+            }
+
+            // /servidores
             if (interaction.commandName === 'servidores') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 const page    = (interaction.options.getInteger('pagina')||1)-1;
@@ -313,6 +351,7 @@ client.on('interactionCreate', async interaction => {
                 ], ephemeral:true });
             }
 
+            // /ler_canal
             if (interaction.commandName === 'ler_canal') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 await interaction.deferReply({ ephemeral:true });
@@ -327,6 +366,7 @@ client.on('interactionCreate', async interaction => {
                 return interaction.editReply({ embeds:[result.embed], components:[result.row] });
             }
 
+            // /canais
             if (interaction.commandName === 'canais') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 await interaction.deferReply({ ephemeral:true });
@@ -354,11 +394,13 @@ client.on('interactionCreate', async interaction => {
                 )});
             }
 
+            // /config
             if (interaction.commandName === 'config') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 return interaction.reply({ embeds:[createConfigEmbed(guildId)], components:createConfigButtons(), ephemeral:true });
             }
 
+            // /cria_ticket
             if (interaction.commandName === 'cria_ticket') {
                 if (!isOwner) return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
                 await interaction.deferReply({ ephemeral:true });
@@ -374,11 +416,11 @@ client.on('interactionCreate', async interaction => {
         // ══════ BUTTONS ══════════════════════════════════════════════════════
         if (interaction.isButton()) {
             const { customId } = interaction;
-            const configIds = ['set_desc','set_welcome','set_role','set_logs','set_cat','add_opt','rem_opt','set_banner','set_staff_role','set_staff_cat'];
+            const configIds = ['set_desc','set_welcome','set_role','set_logs','set_cat','add_opt','rem_opt','set_banner','set_staff_role','set_staff_cat','set_verify_url','set_verify_role'];
             if (configIds.includes(customId) && !isOwner)
                 return interaction.reply({ embeds:[deny('Apenas donos autorizados.')], ephemeral:true });
 
-            // Config buttons
+            // ── Config ──
             if (customId==='set_desc') {
                 const m = new ModalBuilder().setCustomId('modal_desc').setTitle('📝  Descrição do Painel');
                 m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('in_desc').setLabel('Texto do painel').setValue(cfg.description).setStyle(TextInputStyle.Paragraph).setMaxLength(1000)));
@@ -394,12 +436,21 @@ client.on('interactionCreate', async interaction => {
                 m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('in_banner').setLabel('URL da imagem ou GIF').setValue(cfg.banner_url||DEFAULT_BANNER).setStyle(TextInputStyle.Short).setMaxLength(500)));
                 return interaction.showModal(m);
             }
+            if (customId==='set_verify_url') {
+                const m = new ModalBuilder().setCustomId('modal_verify_url').setTitle('🔗  URL de Verificação');
+                m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('in_verify_url').setLabel('Link do servidor que a pessoa deve ter na bio').setValue(cfg.verify_url||'').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('Ex: discord.gg/seuservidor').setMaxLength(200)));
+                return interaction.showModal(m);
+            }
             if (customId==='set_role') {
                 const sel = new RoleSelectMenuBuilder().setCustomId('select_role').setPlaceholder('Cargo da equipe de suporte...');
                 return interaction.reply({ components:[new ActionRowBuilder().addComponents(sel)], ephemeral:true });
             }
             if (customId==='set_staff_role') {
                 const sel = new RoleSelectMenuBuilder().setCustomId('select_staff_role').setPlaceholder('Cargo que revisa formulários de staff...');
+                return interaction.reply({ components:[new ActionRowBuilder().addComponents(sel)], ephemeral:true });
+            }
+            if (customId==='set_verify_role') {
+                const sel = new RoleSelectMenuBuilder().setCustomId('select_verify_role').setPlaceholder('Cargo que a pessoa recebe ao ser verificada...');
                 return interaction.reply({ components:[new ActionRowBuilder().addComponents(sel)], ephemeral:true });
             }
             if (customId==='set_logs') {
@@ -428,6 +479,77 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ components:[new ActionRowBuilder().addComponents(sel)], ephemeral:true });
             }
 
+            // ── Verificação por Bio ──────────────────────────────────────────
+            if (customId.startsWith('verify_bio:')) {
+                await interaction.deferReply({ ephemeral:true });
+                const targetGuildId = customId.split(':')[1];
+                const targetCfg     = getGuildConfig(targetGuildId);
+
+                if (!targetCfg.verify_url || !targetCfg.verify_role_id) {
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.red).setTitle('❌  Sistema não configurado')
+                        .setDescription('O sistema de verificação ainda não foi configurado. Contate um administrador.')
+                    ]});
+                }
+
+                // Busca o usuário com force:true para pegar a bio atualizada
+                let freshUser;
+                try { freshUser = await client.users.fetch(interaction.user.id, { force:true }); }
+                catch { freshUser = interaction.user; }
+
+                const bio = freshUser.bio || '';
+                const urlToFind = targetCfg.verify_url.toLowerCase().trim();
+                const bioLower  = bio.toLowerCase();
+
+                if (!bio) {
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.gold)
+                        .setTitle('⚠️  Bio Vazia')
+                        .setDescription(`Sua bio está **vazia**!\n\n**Como adicionar:**\n> 1. Clique no seu perfil\n> 2. Vá em **Editar perfil**\n> 3. Cole o link na seção **"Sobre mim"**:\n> \`\`\`${targetCfg.verify_url}\`\`\`\n> 4. Salve e clique em **Verificar** novamente.`)
+                        .setFooter({ text:'Certifique-se que o perfil está salvo antes de verificar!' })
+                    ]});
+                }
+
+                if (!bioLower.includes(urlToFind)) {
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.red)
+                        .setTitle('❌  Link Não Encontrado na Bio')
+                        .setDescription(`O link do servidor **não foi encontrado** na sua bio!\n\n**O que adicionar:**\n> \`\`\`${targetCfg.verify_url}\`\`\`\n\n**Sua bio atual:**\n> ${bio.substring(0,300)||'*(vazia)*'}\n\n> ⚠️ Copie o link **exatamente** como mostrado e salve o perfil antes de tentar novamente.`)
+                        .setFooter({ text:'Dica: verifique se não há espaços extras ou letras erradas!' })
+                    ]});
+                }
+
+                // ✅ Link encontrado na bio — dar o cargo
+                const guild  = client.guilds.cache.get(targetGuildId);
+                const member = await guild?.members.fetch(interaction.user.id).catch(()=>null);
+                if (!member) {
+                    return interaction.editReply({ embeds:[deny('Não foi possível encontrar você no servidor.')] });
+                }
+                if (member.roles.cache.has(targetCfg.verify_role_id)) {
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.cyan)
+                        .setTitle('ℹ️  Já Verificado')
+                        .setDescription(`Você já possui o cargo <@&${targetCfg.verify_role_id}>! 🎉`)
+                    ]});
+                }
+                try {
+                    await member.roles.add(targetCfg.verify_role_id, 'Verificação por bio');
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.green)
+                        .setTitle('🎉  Verificação Concluída!')
+                        .setDescription(`${STAR} ${DIV} ${STAR}\n\nSua bio foi verificada com sucesso!\nVocê recebeu o cargo <@&${targetCfg.verify_role_id}>. Bem-vindo! 🚀\n\n${STAR} ${DIV} ${STAR}`)
+                        .setThumbnail(interaction.user.displayAvatarURL({ dynamic:true }))
+                        .setFooter({ text:'EH NIGHT WORLD  •  Verificação' })
+                        .setTimestamp()
+                    ]});
+                } catch {
+                    return interaction.editReply({ embeds:[new EmbedBuilder()
+                        .setColor(C.red).setTitle('❌  Erro ao dar cargo')
+                        .setDescription('Não foi possível te dar o cargo. Verifique se o bot tem permissão de **Gerenciar Cargos** e se o cargo do bot está **acima** do cargo de verificado.')
+                    ]});
+                }
+            }
+
             // ── Formulário staff — botões de continuação ──
             if (customId.startsWith('staff_restart:')) {
                 const uid = customId.split(':')[1];
@@ -444,7 +566,6 @@ client.on('interactionCreate', async interaction => {
                 );
                 return interaction.showModal(modal);
             }
-
             if (customId.startsWith('staff_cont_2:')) {
                 const uid = customId.split(':')[1];
                 if (uid !== interaction.user.id) return interaction.reply({ embeds:[deny('Este botão não é para você.')], ephemeral:true });
@@ -458,7 +579,6 @@ client.on('interactionCreate', async interaction => {
                 );
                 return interaction.showModal(modal2);
             }
-
             if (customId.startsWith('staff_cont_3:')) {
                 const uid = customId.split(':')[1];
                 if (uid !== interaction.user.id) return interaction.reply({ embeds:[deny('Este botão não é para você.')], ephemeral:true });
@@ -476,10 +596,10 @@ client.on('interactionCreate', async interaction => {
             if (customId.startsWith('staff_approve:') || customId.startsWith('staff_reject:')) {
                 if (!isOwner && !(cfg.staff_review_role_id && interaction.member?.roles?.cache?.has(cfg.staff_review_role_id)))
                     return interaction.reply({ embeds:[deny('Apenas donos ou cargo de revisão.')], ephemeral:true });
-                const parts   = customId.split(':');
+                const parts    = customId.split(':');
                 const aprovado = parts[0] === 'staff_approve';
-                const userId  = parts[1];
-                if (userId === 'done') return; // botão já desabilitado
+                const userId   = parts[1];
+                if (userId === 'done') return;
                 await interaction.reply({ embeds:[new EmbedBuilder()
                     .setColor(aprovado ? C.green : C.red)
                     .setTitle(aprovado ? '✅  Candidatura Aprovada!' : '❌  Candidatura Reprovada')
@@ -552,9 +672,9 @@ client.on('interactionCreate', async interaction => {
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(C.green)
                     .setFooter({ text:`✅  Atendido por: ${interaction.user.tag}`, iconURL:interaction.user.displayAvatarURL() });
                 const newRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('close_ticket').setLabel('Fechar Ticket') .setEmoji('🔒').setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId('claim_ticket').setLabel('Assumido')      .setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(true),
-                    new ButtonBuilder().setCustomId('notify_user') .setLabel('Notificar')     .setEmoji('🔔').setStyle(ButtonStyle.Primary)
+                    new ButtonBuilder().setCustomId('close_ticket').setLabel('Fechar Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('claim_ticket').setLabel('Assumido')     .setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(true),
+                    new ButtonBuilder().setCustomId('notify_user') .setLabel('Notificar')    .setEmoji('🔔').setStyle(ButtonStyle.Primary)
                 );
                 await interaction.update({ embeds:[updatedEmbed], components:[newRow] });
                 return interaction.followUp({ embeds:[new EmbedBuilder().setColor(C.green).setDescription(`🙋  **${interaction.user}** assumiu este ticket!`)] });
@@ -576,7 +696,11 @@ client.on('interactionCreate', async interaction => {
             }
             if (interaction.customId==='select_staff_role') {
                 cfg.staff_review_role_id = interaction.values[0]; saveDB();
-                return interaction.update({ embeds:[new EmbedBuilder().setColor(C.green).setTitle('✅  Cargo de Revisão').setDescription(`<@&${cfg.staff_review_role_id}> irá revisar os formulários de staff.`)], components:[] });
+                return interaction.update({ embeds:[new EmbedBuilder().setColor(C.green).setTitle('✅  Cargo de Revisão').setDescription(`<@&${cfg.staff_review_role_id}> irá revisar os formulários.`)], components:[] });
+            }
+            if (interaction.customId==='select_verify_role') {
+                cfg.verify_role_id = interaction.values[0]; saveDB();
+                return interaction.update({ embeds:[new EmbedBuilder().setColor(C.green).setTitle('✅  Cargo de Verificado').setDescription(`<@&${cfg.verify_role_id}> será dado a quem verificar a bio.`)], components:[] });
             }
         }
         if (interaction.isChannelSelectMenu()) {
@@ -638,23 +762,27 @@ client.on('interactionCreate', async interaction => {
 
         // ══════ MODALS ════════════════════════════════════════════════════════
         if (interaction.isModalSubmit()) {
+            if (!['modal_desc','modal_welcome','modal_banner','modal_add','modal_verify_url','staff_form_1','staff_form_2','staff_form_3'].includes(interaction.customId)) return;
 
-            // Config modals
-            if (['modal_desc','modal_welcome','modal_banner','modal_add'].includes(interaction.customId)) {
-                if (!isOwner) return interaction.reply({ embeds:[deny('Acesso negado.')], ephemeral:true });
-                if (interaction.customId==='modal_desc')    cfg.description  = interaction.fields.getTextInputValue('in_desc');
-                if (interaction.customId==='modal_welcome') cfg.welcome_text = interaction.fields.getTextInputValue('in_welcome');
-                if (interaction.customId==='modal_banner')  cfg.banner_url   = interaction.fields.getTextInputValue('in_banner');
-                if (interaction.customId==='modal_add') {
-                    const name  = interaction.fields.getTextInputValue('in_name');
-                    const emoji = interaction.fields.getTextInputValue('in_emoji')||'🎫';
-                    if (!cfg.categories.find(c=>c.name===name)) cfg.categories.push({ name, emoji });
-                }
+            if (interaction.customId==='modal_desc')    { if (!isOwner) return; cfg.description  = interaction.fields.getTextInputValue('in_desc'); saveDB(); return interaction.update({ embeds:[createConfigEmbed(guildId)], components:createConfigButtons() }); }
+            if (interaction.customId==='modal_welcome') { if (!isOwner) return; cfg.welcome_text = interaction.fields.getTextInputValue('in_welcome'); saveDB(); return interaction.update({ embeds:[createConfigEmbed(guildId)], components:createConfigButtons() }); }
+            if (interaction.customId==='modal_banner')  { if (!isOwner) return; cfg.banner_url   = interaction.fields.getTextInputValue('in_banner'); saveDB(); return interaction.update({ embeds:[createConfigEmbed(guildId)], components:createConfigButtons() }); }
+            if (interaction.customId==='modal_add') {
+                if (!isOwner) return;
+                const name  = interaction.fields.getTextInputValue('in_name');
+                const emoji = interaction.fields.getTextInputValue('in_emoji')||'🎫';
+                if (!cfg.categories.find(c=>c.name===name)) cfg.categories.push({ name, emoji });
                 saveDB();
                 return interaction.update({ embeds:[createConfigEmbed(guildId)], components:createConfigButtons() });
             }
+            if (interaction.customId==='modal_verify_url') {
+                if (!isOwner) return;
+                cfg.verify_url = interaction.fields.getTextInputValue('in_verify_url').trim();
+                saveDB();
+                return interaction.update({ embeds:[new EmbedBuilder().setColor(C.green).setTitle('✅  URL Configurada').setDescription(`Link de verificação definido:\n\`\`\`${cfg.verify_url}\`\`\``)], components:[] });
+            }
 
-            // ── Staff form Parte 1 — salva e pede para continuar com botão ──
+            // ── Staff form Parte 1 ──
             if (interaction.customId === 'staff_form_1') {
                 const app = getStaffApp(interaction.user.id) || { step:0, answers:[], guildId };
                 app.answers[0] = interaction.fields.getTextInputValue('s1');
@@ -665,17 +793,15 @@ client.on('interactionCreate', async interaction => {
                 app.step = 1;
                 setStaffApp(interaction.user.id, app);
                 return interaction.reply({ ephemeral:true, embeds:[new EmbedBuilder()
-                    .setColor(C.gold)
-                    .setTitle('✅  Parte 1 Salva! — 1/3')
+                    .setColor(C.gold).setTitle('✅  Parte 1 Salva! — 1/3')
                     .setDescription(`${STAR} ${DIV} ${STAR}\n\nÓtimo! Suas primeiras 5 respostas foram salvas.\n\n**Clique no botão abaixo para continuar para a Parte 2.**\n\n${STAR} ${DIV} ${STAR}`)
-                    .setFooter({ text:'EH NIGHT WORLD  •  Formulário de Staff' })
-                    .setTimestamp()
+                    .setFooter({ text:'EH NIGHT WORLD  •  Formulário de Staff' }).setTimestamp()
                 ], components:[new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`staff_cont_2:${interaction.user.id}`).setLabel('▶️  Continuar — Parte 2 de 3').setStyle(ButtonStyle.Primary)
                 )]});
             }
 
-            // ── Staff form Parte 2 — salva e pede para continuar com botão ──
+            // ── Staff form Parte 2 ──
             if (interaction.customId === 'staff_form_2') {
                 const app = getStaffApp(interaction.user.id);
                 if (!app) return interaction.reply({ embeds:[deny('Sessão expirada. Use /formulario novamente.')], ephemeral:true });
@@ -687,17 +813,15 @@ client.on('interactionCreate', async interaction => {
                 app.step = 2;
                 setStaffApp(interaction.user.id, app);
                 return interaction.reply({ ephemeral:true, embeds:[new EmbedBuilder()
-                    .setColor(C.gold)
-                    .setTitle('✅  Parte 2 Salva! — 2/3')
-                    .setDescription(`${STAR} ${DIV} ${STAR}\n\nMuito bem! Mais 5 respostas salvas.\n\n**Clique no botão abaixo para continuar para a Parte 3 (última).**\n\n${STAR} ${DIV} ${STAR}`)
-                    .setFooter({ text:'EH NIGHT WORLD  •  Formulário de Staff' })
-                    .setTimestamp()
+                    .setColor(C.gold).setTitle('✅  Parte 2 Salva! — 2/3')
+                    .setDescription(`${STAR} ${DIV} ${STAR}\n\nMuito bem! Mais 5 respostas salvas.\n\n**Clique no botão abaixo para a Parte 3 (última).**\n\n${STAR} ${DIV} ${STAR}`)
+                    .setFooter({ text:'EH NIGHT WORLD  •  Formulário de Staff' }).setTimestamp()
                 ], components:[new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`staff_cont_3:${interaction.user.id}`).setLabel('▶️  Continuar — Parte 3 de 3 (Final)').setStyle(ButtonStyle.Success)
                 )]});
             }
 
-            // ── Staff form Parte 3 — envia o formulário completo ──
+            // ── Staff form Parte 3 ──
             if (interaction.customId === 'staff_form_3') {
                 const app = getStaffApp(interaction.user.id);
                 if (!app) return interaction.reply({ embeds:[deny('Sessão expirada. Use /formulario novamente.')], ephemeral:true });
@@ -706,15 +830,11 @@ client.on('interactionCreate', async interaction => {
                 app.answers[12] = interaction.fields.getTextInputValue('s13');
                 app.answers[13] = interaction.fields.getTextInputValue('s14')||'Nenhuma informação extra.';
                 delStaffApp(interaction.user.id);
-
                 await interaction.deferReply({ ephemeral:true });
-
                 const reviewGuildId = app.guildId || guildId;
                 const reviewCfg     = getGuildConfig(reviewGuildId);
                 const guild         = client.guilds.cache.get(reviewGuildId);
-
-                if (!guild) return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.red).setTitle('❌  Erro').setDescription('Servidor não encontrado. Contate um administrador.')] });
-
+                if (!guild) return interaction.editReply({ embeds:[deny('Servidor não encontrado.')] });
                 const channelData = {
                     name:`📋・form-${interaction.user.username}`,
                     type:ChannelType.GuildText,
@@ -722,8 +842,8 @@ client.on('interactionCreate', async interaction => {
                     permissionOverwrites:[
                         { id:guild.id,       deny:[PermissionFlagsBits.ViewChannel] },
                         { id:client.user.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] },
-                        ...(reviewCfg.admin_role_id        ? [{ id:reviewCfg.admin_role_id,        allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : []),
-                        ...(reviewCfg.staff_review_role_id ? [{ id:reviewCfg.staff_review_role_id,  allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : [])
+                        ...(reviewCfg.admin_role_id        ? [{ id:reviewCfg.admin_role_id,       allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : []),
+                        ...(reviewCfg.staff_review_role_id ? [{ id:reviewCfg.staff_review_role_id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : [])
                     ]
                 };
                 if (reviewCfg.staff_category_id) {
@@ -731,27 +851,23 @@ client.on('interactionCreate', async interaction => {
                     if (parent?.type===ChannelType.GuildCategory) channelData.parent = reviewCfg.staff_category_id;
                 }
                 const reviewChannel = await guild.channels.create(channelData).catch(()=>null);
-                if (!reviewChannel) return interaction.editReply({ embeds:[new EmbedBuilder().setColor(C.red).setTitle('❌  Erro ao criar canal').setDescription('Verifique as permissões do bot no servidor.')] });
-
+                if (!reviewChannel) return interaction.editReply({ embeds:[deny('Erro ao criar canal. Verifique as permissões.')] });
                 const mentions = [
                     reviewCfg.admin_role_id        ? `<@&${reviewCfg.admin_role_id}>`        : '',
                     reviewCfg.staff_review_role_id  ? `<@&${reviewCfg.staff_review_role_id}>` : ''
                 ].filter(Boolean).join(' ');
-
                 const btns = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`staff_approve:${interaction.user.id}`).setLabel('✅  Aprovar') .setStyle(ButtonStyle.Success),
                     new ButtonBuilder().setCustomId(`staff_reject:${interaction.user.id}`) .setLabel('❌  Reprovar').setStyle(ButtonStyle.Danger)
                 );
                 await reviewChannel.send({ content:mentions||undefined, embeds:[buildStaffResultEmbed(interaction.user, app.answers)], components:[btns] });
-
                 return interaction.editReply({ embeds:[new EmbedBuilder()
                     .setColor(C.green)
                     .setAuthor({ name:'EH NIGHT WORLD', iconURL:client.user.displayAvatarURL() })
                     .setTitle('🎉  Formulário Enviado com Sucesso!')
-                    .setDescription(`${STAR} ${DIV} ${STAR}\n\nSua candidatura para **Staff** foi recebida com sucesso!\n\nA equipe irá analisar suas respostas e você receberá o resultado **via DM**.\n\n> 📬 Mantenha suas DMs abertas!\n\n${STAR} ${DIV} ${STAR}`)
+                    .setDescription(`${STAR} ${DIV} ${STAR}\n\nSua candidatura para **Staff** foi recebida!\nA equipe irá analisar e você receberá o resultado **via DM**.\n\n> 📬 Mantenha suas DMs abertas!\n\n${STAR} ${DIV} ${STAR}`)
                     .setThumbnail(interaction.user.displayAvatarURL({ dynamic:true }))
-                    .setFooter({ text:'EH NIGHT WORLD  •  Boa sorte! 🍀' })
-                    .setTimestamp()
+                    .setFooter({ text:'EH NIGHT WORLD  •  Boa sorte! 🍀' }).setTimestamp()
                 ]});
             }
         }
